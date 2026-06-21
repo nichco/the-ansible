@@ -23,6 +23,8 @@ class Rosenbrock1(pmdo.ExplicitDiscipline):
         # y = inputs["y"]
         # mu = inputs["mu"]
 
+        print('x_init: ', x_init)
+
         x1 = x_init[0]
         x2 = x_init[1]
         v0 = np.atleast_1d(x1)
@@ -36,8 +38,9 @@ class Rosenbrock1(pmdo.ExplicitDiscipline):
         optimizer.solve()
         optimizer.print_results()
 
-        ans = optimizer.results['x']
-        ans = float(ans)
+        ans = optimizer.results['x'][0]
+
+        print('outputs: ', np.array([ans, x2]))
 
         outputs["x"] = np.array([ans, x2])
 
@@ -53,7 +56,7 @@ if __name__ == "__main__":
     discipline = pmdo.ExplicitServer(discipline=Rosenbrock1())
     discipline.attach_to_server(server)
 
-    server.add_insecure_port("[::]:50051")
+    server.add_insecure_port("[::]:50052")
     server.start()
-    print("Server started. Listening on port 50051.")
+    print("Server started. Listening on port 50052.")
     server.wait_for_termination()

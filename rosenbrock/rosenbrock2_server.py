@@ -23,6 +23,8 @@ class Rosenbrock2(pmdo.ExplicitDiscipline):
         # y = inputs["y"]
         # mu = inputs["mu"]
 
+        print('x_init: ', x_init)
+
         x1 = x_init[0]
         x2 = x_init[1]
         v0 = np.atleast_1d(x2)
@@ -36,8 +38,9 @@ class Rosenbrock2(pmdo.ExplicitDiscipline):
         optimizer.solve()
         optimizer.print_results()
 
-        ans = optimizer.results['x']
-        ans = float(ans)
+        ans = optimizer.results['x'][0]
+
+        print('outputs: ', np.array([x1, ans]))
 
         outputs["x"] = np.array([x1, ans])
 
