@@ -4,6 +4,7 @@ from philote_mdo.general import ExplicitClient
 from typing import List, Callable
 import time
 from combo import combo
+import matplotlib.pyplot as plt
 
 
 class AugmentedLagrangianBlockCoordinateDescent():
@@ -28,7 +29,7 @@ class AugmentedLagrangianBlockCoordinateDescent():
         # self.x_time = [0.0]
         self.tf = None
         self.con = con
-        self.mu = mu # penalty parameter(s)
+        self.mu = np.asarray(mu) # penalty parameter(s)
         self.max_mu = max_mu
         self.rho = rho
         self.tau = tau
@@ -36,6 +37,7 @@ class AugmentedLagrangianBlockCoordinateDescent():
         self.eps = eps
         self.eta = eta
         self.max_y = max_y
+        self.history = [self.x.copy()]
 
         self.initial_constraint_values = self.con(self.x)
         self.y = np.zeros_like(self.initial_constraint_values) # Lagrange multipliers
@@ -49,16 +51,16 @@ class AugmentedLagrangianBlockCoordinateDescent():
 
     def _update_mu(self, c_new, c_old) -> None:
 
-        if isinstance(self.mu, np.ndarray):
+        # if isinstance(self.mu, np.ndarray):
 
-            for i, (f_new, f_old) in enumerate(zip(abs(c_new), abs(c_old))):
-                if f_new > self.tau * f_old and f_new > self.tol:
-                    self.mu[i] = min(self.rho * self.mu[i], self.max_mu)
+        #     for i, (f_new, f_old) in enumerate(zip(abs(c_new), abs(c_old))):
+        #         if f_new > self.tau * f_old and f_new > self.tol:
+        #             self.mu[i] = min(self.rho * self.mu[i], self.max_mu)
 
-        elif isinstance(self.mu, (float, int)):
+        # elif isinstance(self.mu, (float, int)):
 
-            if max(abs(c_new)) > self.tau * max(abs(c_old)) and max(abs(c_new)) > self.tol:
-                self.mu = min(self.rho * self.mu, self.max_mu)
+        if max(abs(c_new)) > self.tau * max(abs(c_old)) and max(abs(c_new)) > self.tol:
+            self.mu = min(self.rho * self.mu, self.max_mu)
 
         return None
 
@@ -83,9 +85,10 @@ class AugmentedLagrangianBlockCoordinateDescent():
 
                 # Gauss-Seidel loop
                 for client in self.clients:
-                    inputs = {"x": np.concatenate([xi.ravel() for xi in self.x])}
+                    inputs = {"x": np.concatenate([xi.ravel() for xi in self.x]), "y": self.y, "mu": self.mu}
                     outputs = client.run_compute(inputs)
                     self.x = [np.asarray(outputs["x"][i]) for i in range(len(self.x))]
+                    self.history.append(self.x.copy())
 
                 z_new = np.concatenate([xi.ravel() for xi in self.x])
                 step = abs(z_new - z_old)
@@ -110,7 +113,6 @@ class AugmentedLagrangianBlockCoordinateDescent():
 
             c_new = self.con(self.x)
             feas = np.max(abs(c_new))
-            # self.feasibility.append(feas)
 
             if feas <= self.tol and phase == 1:
                 print('-Dual loop converged with feasibility: ', feas, ' in ', k, ' dual iterations!-')
@@ -122,10 +124,10 @@ class AugmentedLagrangianBlockCoordinateDescent():
 
             # self.y += np.diag(self.mu) @ c_new # always update the multipliers
             # self.y_history.append(self.y.copy())
-            if isinstance(self.mu, np.ndarray):
-                self.y += np.diag(self.mu) @ c_new
-            if isinstance(self.mu, (float, int)):
-                self.y += self.mu * c_new
+            # if isinstance(self.mu, np.ndarray):
+            #     self.y += np.diag(self.mu) @ c_new
+            # if isinstance(self.mu, (float, int)):
+            self.y += self.mu * c_new
 
             # self.y_history.append(self.y)
 
@@ -168,16 +170,52 @@ if __name__ == "__main__":
     opt = AugmentedLagrangianBlockCoordinateDescent(clients=[client1, client2], 
                                                     x_init=x_init, 
                                                     con=con,
-                                                    mu=1.0,
+                                                    mu=1,
                                                     max_mu=1e3,
                                                     rho=1.2,
                                                     tau=0.5,
-                                                    tol=1e-3,
-                                                    eps=1e-3,
-                                                    eta=1e-5,
+                                                    tol=1e-4,
+                                                    eps=1e-2, # initial inner loop convergence tolerance
+                                                    eta=1e-5, # final inner loop convergence tolerance
                                                     max_y=1e6
                                                     )
     opt.solve(max_outer_iter=100,
-              max_inner_iter=100,
+              max_inner_iter=10,
               )
     print(opt.x)
+
+    x1_1_history = [h[0] for h in opt.history]
+    x2_1_history = [h[1] for h in opt.history]
+    x1_2_history = [h[2] for h in opt.history]
+    x2_2_history = [h[3] for h in opt.history]
+
+
+    x = np.linspace(-1.5, 1.5, 200)
+    y = np.linspace(-1.5, 1.5, 200)
+    X, Y = np.meshgrid(x, y)
+    Z = X**2 + Y**2 - 1.5 * X * Y
+    levels = np.linspace(0, max(Z.flatten()), 30)
+    plt.contour(X, Y, Z, levels=levels, cmap='Blues_r', alpha=0.4, linewidths=0.5)
+    plt.contourf(X, Y, Z, levels=levels, cmap='Blues_r', alpha=0.5)
+
+    plt.plot(x1_1_history, x2_2_history, 's-', color='tab:orange', linewidth=2.5, markersize=6, zorder=10, mec='k', label=r'$(x_1, y_2)$')
+    plt.plot(x1_2_history, x2_1_history, 'o-', color='tab:purple', linewidth=2.5, markersize=6, zorder=10, mec='k', label=r'$(x_2, y_1)$')
+    plt.xlim(-1.5, 1.5)
+    plt.ylim(-1.5, 1.5)
+    plt.xlabel('x')
+    plt.ylabel('y')
+
+    theta = np.linspace(0, 2*np.pi, 100)
+    circle_x = 0.5 * np.cos(theta)
+    circle_y = 0.5 * np.sin(theta)
+    plt.plot(circle_x, circle_y, '--', color='black', linewidth=2, alpha=0.5)
+    plt.fill(circle_x, circle_y, color='black', alpha=0.3)
+
+    ticks = [-1, 0, 1]
+    plt.xticks(ticks)
+    plt.yticks(ticks)
+    plt.legend()
+    plt.gca().set_aspect('equal')
+
+    # plt.savefig('augmented_lagrangian_circle_constraint.pdf', bbox_inches='tight')
+    plt.show()
