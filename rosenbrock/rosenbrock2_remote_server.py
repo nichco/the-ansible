@@ -57,7 +57,7 @@ if __name__ == "__main__":
     discipline.attach_to_server(server)
 
     # server.add_insecure_port("[::]:50051") # localhost only
-    server.add_insecure_port('0.0.0.0:50052') # accepts connections from other machines
+    server.add_insecure_port('0.0.0.0:50051') # accepts connections from other machines
     server.start()
     print("Server started. Listening on port 50051.")
     server.wait_for_termination()
