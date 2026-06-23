@@ -85,7 +85,7 @@ class AugmentedLagrangianBlockCoordinateDescent():
 
                 # Gauss-Seidel loop
                 for client in self.clients:
-                    inputs = {"x": np.concatenate([xi.ravel() for xi in self.x]), "y": self.y, "mu": self.mu}
+                    inputs = {"x": np.concatenate([xi.ravel() for xi in self.x]), "y": self.y, "mu": np.atleast_1d(self.mu)}
                     outputs = client.run_compute(inputs)
                     self.x = [np.asarray(outputs["x"][i]) for i in range(len(self.x))]
                     self.history.append(self.x.copy())
@@ -170,7 +170,7 @@ if __name__ == "__main__":
     opt = AugmentedLagrangianBlockCoordinateDescent(clients=[client1, client2], 
                                                     x_init=x_init, 
                                                     con=con,
-                                                    mu=1,
+                                                    mu=10,#1,
                                                     max_mu=1e3,
                                                     rho=1.2,
                                                     tau=0.5,
@@ -183,6 +183,7 @@ if __name__ == "__main__":
               max_inner_iter=10,
               )
     print(opt.x)
+    print('total time (s): ', opt.tf)
 
     x1_1_history = [h[0] for h in opt.history]
     x2_1_history = [h[1] for h in opt.history]
