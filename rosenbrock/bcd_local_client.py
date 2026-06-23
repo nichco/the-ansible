@@ -101,3 +101,4 @@ if __name__ == "__main__":
     opt = BlockCoordinateDescent(clients=[client1, client2], x_init=x_init, eps=1e-5)
     opt.solve(max_iter=100)
     print(opt.x)
+    print('total time (s): ', opt.tf)
