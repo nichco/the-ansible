@@ -5,16 +5,17 @@ jax.config.update("jax_enable_x64", True)
 import numpy as np
 from modopt import JaxProblem, SLSQP
 from combo import combo
-from aero import LiftingLine
+from beam import Beam
 
-# aero problem setup
-N = 31
-b = 10.0
-c_root = 1.0
-c_tip = 0.65
-rho_atm = 1.225
-v_inf = 60
-lifting_line = LiftingLine(N, b, c_root, c_tip, v_inf, rho_atm)
+# struct setup
+num_nodes   = 31
+mesh        = np.zeros((num_nodes, 3))
+mesh[:, 1]  = lifting_line.y
+fixed_nodes = [num_nodes // 2] # the center node is fixed in all DOFs
+r = 0.2 * (lifting_line.chord[:-1] + lifting_line.chord[1:]) / 4 # radius of the tube as a function of chord
+m0 = 1e3
+load_factor = 3
+safety_factor = 1.5
 tip_disp_target = 0.1
 
 # constraint scalers
@@ -22,7 +23,7 @@ lw_scale = 1e-4
 f_scale = 2e-4
 disp_scale = 3e-1
 
-class Aero(pmdo.ExplicitDiscipline):
+class Struct(pmdo.ExplicitDiscipline):
 
     def setup(self):
         self.add_input("x", shape=(4,))  # input variables
@@ -55,18 +56,17 @@ class Aero(pmdo.ExplicitDiscipline):
 
         def jax_obj(v):
 
-            coef = lifting_line.solve_lifting_line_model(v)
-            CD = lifting_line.compute_drag(coef)
-            f = lifting_line.compute_forces(coef)
-            f = jnp.linalg.norm(f, axis=1)
-            CL = lifting_line.compute_lift_coefficient(coef)
-            lift = 0.5 * rho_atm * v_inf**2 * CL * lifting_line.S
-            
+            t = v[:num_nodes - 1]
+            aero_loads_copy = v[num_nodes - 1:]
+
+            # run the structures model
+            right_tip_disp, left_tip_disp, weight = structures_model(aero_loads_copy, t)
+
             # compute the global constraints
-            f_con = (input_f_hat - f) * f_scale
-            l_equals_w = (lift - input_weight) * lw_scale
-            right_disp_con = (input_right_tip_disp - tip_disp_target) * disp_scale
-            left_disp_con = (input_left_tip_disp - tip_disp_target) * disp_scale
+            f_con = (aero_loads_copy - aero_loads) * f_scale
+            l_equals_w = (lift - weight) * lw_scale
+            right_disp_con = (right_tip_disp - tip_disp_target) * disp_scale
+            left_disp_con = (left_tip_disp - tip_disp_target) * disp_scale
             c = jnp.concatenate([f_con, jnp.array([right_disp_con, left_disp_con, l_equals_w])])
 
             return 1e3 * CD + y.T @ c + 0.5 * c.T @ jnp.diag(mu) @ c
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     discipline = pmdo.ExplicitServer(discipline=Aero())
     discipline.attach_to_server(server)
 
-    server.add_insecure_port("[::]:50052")
+    server.add_insecure_port("[::]:50051")
     server.start()
-    print("Server started. Listening on port 50052.")
+    print("Server started. Listening on port 50051.")
     server.wait_for_termination()
